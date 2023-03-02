@@ -4,7 +4,7 @@ import datetime
 
 class Weather:
     def __init__(self):
-        API = "19b2957c83df7659e121f9e9781b9fa9"
+        API = "API"
         self.URL = "https://api.openweathermap.org"
         self.URL_FORECAST = self.URL + "/data/2.5/forecast"
         self.URL_WEATHER = self.URL + "/data/2.5/weather"

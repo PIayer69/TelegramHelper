@@ -69,19 +69,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def weather(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.args[0] == "teraz":
-        weather = w.getCurrentWeather(
-            context.args[1], "pl" if len(context.args) == 2 else context.args[2]
-        )
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=weather)
-    else:
-        forecastData = w.getForecast(context.args[1], "pl")
-        dayForecast = w.findForecastByDay(
-            forecastData, datetime.datetime.now().day + int(context.args[0])
-        )
-        forecast = w.prepareForecast(dayForecast, context.args[1])
+    try:
+        if context.args[0] == "teraz":
+            weather = w.getCurrentWeather(
+                context.args[1], "pl" if len(context.args) == 2 else context.args[2]
+            )
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id, text=weather
+            )
+        else:
+            forecastData = w.getForecast(context.args[1], "pl")
+            dayForecast = w.findForecastByDay(
+                forecastData, datetime.datetime.now().day + int(context.args[0])
+            )
+            forecast = w.prepareForecast(
+                dayForecast,
+                context.args[1] if len(context.args) == 2 else context.args[2],
+            )
 
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=forecast)
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id, text=forecast
+            )
+    except IndexError:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Użycie: /pogoda <teraz|1|2|3|4|5> <miasto>",
+        )
 
 
 async def setGreeting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -125,11 +138,13 @@ async def greeting(context: ContextTypes.DEFAULT_TYPE):
 
 
 async def jobs(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    jobs = "\n".join([f"{j.chat_id}: {j.next_t.strftime('%H:%M')} + 1:00 {j.data}" for j in context.job_queue.jobs()])
-    await context.bot.send_message(
-        chat_id=update.effective_message.chat_id,
-        text=jobs
+    jobs = "\n".join(
+        [
+            f"{j.chat_id}: {j.next_t.strftime('%H:%M')} + 1:00 {j.data}"
+            for j in context.job_queue.jobs()
+        ]
     )
+    await context.bot.send_message(chat_id=update.effective_message.chat_id, text=jobs)
 
 
 if __name__ == "__main__":
