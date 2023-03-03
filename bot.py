@@ -148,7 +148,7 @@ async def jobs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 if __name__ == "__main__":
-    application = ApplicationBuilder().token(TOKEN).get_updates_http_version('1.1').http_version('1.1').build()
+    application = ApplicationBuilder().token(TOKEN).read_timeout(10).get_updates_read_timeout(20).get_updates_http_version('1.1').http_version('1.1').build()
     initJobs(application)
 
     application.add_handler(CommandHandler("start", start))
