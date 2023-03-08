@@ -1,14 +1,17 @@
 import logging
 import datetime
 import pickle
+import json
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 
 from weather import Weather
 
-TOKEN = open("TOKEN.txt", "r").read().strip()
-FILENAME_JOBS = "jobs"
-w = Weather()
+with open("TOKENS.txt", "r") as f:
+    APIs = json.load(f)
+
+FILENAME_JOBS = "bot_jobs"
+w = Weather(APIs["openweather"])
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -22,20 +25,20 @@ def initJobs(app):
         for job in jobs:
             time = job["time"].time()
             app.job_queue.run_daily(
-                greeting,
+                greetingJob,
                 chat_id=job["chat_id"],
                 time=job["time"].time(),
                 name=str(job["chat_id"]),
-                data=job["city"],
+                data=job["data"],
             )
     except FileNotFoundError:
-        return []
+        pass
 
 
 def saveJobs(jobsData) -> None:
     jobs = []
     for job in jobsData:
-        jobs.append({"chat_id": job.chat_id, "time": job.next_t, "city": job.data})
+        jobs.append({"chat_id": job.chat_id, "time": job.next_t, "data": job.data})
     with open(FILENAME_JOBS, "wb+") as f:
         pickle.dump(jobs, f)
 
@@ -56,15 +59,22 @@ async def unset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
     job_removed = remove_job_if_exists(str(chat_id), context)
     text = (
-        "Timer successfully cancelled!" if job_removed else "You have no active timer."
+        "Usunieto greeting" if job_removed else "Brak ustawionego greetingu"
     )
     await update.message.reply_text(text)
+
+
+async def greetingJob(context: ContextTypes.DEFAULT_TYPE):
+    forecastData = w.getForecast(context.job.data["city"], "pl")
+    forecastDay = w.findForecastByDay(forecastData, datetime.datetime.now().day)
+    forecast = w.prepareGreetingForecast(forecastDay, context.job.data)
+    await context.bot.send_message(chat_id=context.job.chat_id, text=forecast, parse_mode="MarkdownV2")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text="/pogoda [teraz/0 - dzisiaj/1 - jutro/2 - pojutrze] miasto",
+        text=f"Hej @{update.effective_user.username} :D",
     )
 
 
@@ -78,7 +88,9 @@ async def weather(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=update.effective_chat.id, text=weather
             )
         else:
-            forecastData = w.getForecast(context.args[1], "pl")
+            forecastData = w.getForecast(
+                context.args[1], "pl" if len(context.args) == 2 else context.args[2]
+            )
             dayForecast = w.findForecastByDay(
                 forecastData, datetime.datetime.now().day + int(context.args[0])
             )
@@ -86,27 +98,22 @@ async def weather(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 dayForecast,
                 context.args[1] if len(context.args) == 2 else context.args[2],
             )
-
             await context.bot.send_message(
                 chat_id=update.effective_chat.id, text=forecast
             )
-    except IndexError:
+    except IndexError as e:
+        print(e)
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="Użycie: /pogoda <teraz|1|2|3|4|5> <miasto>",
+            text="Użycie:\n/pogoda <teraz|0|1|2|3|4|5> <miasto> <kraj - domyślnie: pl>",
         )
 
 
 async def setGreeting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_message.chat_id
-    if (
-        len(context.args) == 2
-        and type(context.args[0]) is str
-        and all([h.isdigit() for h in context.args[1].split(":")])
-    ):
+    try:
         time = context.args[1].split(":")
         city = context.args[0]
-        a = int(time[1])
         hour = datetime.time(
             int(context.args[1]) - 1 if len(time) == 1 else int(time[0]) - 1,
             0 if len(time) == 1 else int(time[1]),
@@ -114,7 +121,11 @@ async def setGreeting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
         job_removed = remove_job_if_exists(str(chat_id), context)
         context.job_queue.run_daily(
-            greeting, hour, chat_id=chat_id, name=str(chat_id), data=city
+            greetingJob,
+            hour,
+            chat_id=chat_id,
+            name=str(chat_id),
+            data={"city": city, "username": update.effective_user.username},
         )
 
         text = "Ustawiono nowy greeting!"
@@ -123,24 +134,16 @@ async def setGreeting(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         saveJobs(context.job_queue.jobs())
         await update.effective_message.reply_text(text)
 
-    else:
+    except (IndexError, ValueError):
         await update.effective_message.reply_text(
-            "Użycie: /greeting <miasto> <godzina(1-24)>"
+            "Użycie:\n/greeting <miasto> <godzina(1-24)>"
         )
-
-
-async def greeting(context: ContextTypes.DEFAULT_TYPE):
-    forecastData = w.getForecast(context.job.data, "pl")
-    forecastDay = w.findForecastByDay(forecastData, datetime.datetime.now().day)
-    forecast = w.prepareForecast(forecastDay, context.job.data)
-
-    await context.bot.send_message(chat_id=context.job.chat_id, text=forecast)
 
 
 async def jobs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     jobs = "\n".join(
         [
-            f"{j.chat_id}: {j.next_t.strftime('%H:%M')} + 1:00 {j.data}"
+            f"{j.data['username']}:{j.chat_id}: {(j.next_t + datetime.timedelta(hours=1)).strftime('%H:%M')} {j.data['city']}"
             for j in context.job_queue.jobs()
         ]
     )
@@ -148,12 +151,21 @@ async def jobs(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 if __name__ == "__main__":
-    application = ApplicationBuilder().token(TOKEN).read_timeout(10).get_updates_read_timeout(20).get_updates_http_version('1.1').http_version('1.1').build()
+    application = (
+        ApplicationBuilder()
+        .token(APIs["telegram"])
+        .read_timeout(10)
+        .get_updates_read_timeout(20)
+        .get_updates_http_version("1.1")
+        .http_version("1.1")
+        .build()
+    )
     initJobs(application)
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("pogoda", weather))
     application.add_handler(CommandHandler("greeting", setGreeting))
     application.add_handler(CommandHandler("jobs", jobs))
+    application.add_handler(CommandHandler("unset", unset))
 
     application.run_polling()
