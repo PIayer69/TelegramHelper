@@ -73,8 +73,8 @@ else "Średnio zachmurzone" if forecastData['clouds'] > 50
 else "Mało zachmurzone" if forecastData['clouds'] > 25
 else "Bardzo mało zachmurzone" if forecastData['clouds'] > 0
 else "Bezchmurne"} niebo
-{f"Deszcz w godzinach: {' '.join([str(h) for h in forecastData['rain']['hour']])}" if len(forecastData["rain"]["hour"]) else ''}
-{f"Śnieg w godzinach: {' '.join([str(h) for h in forecastData['snow']['hour']])}" if len(forecastData["snow"]["hour"]) else ''}"""
+{f"Deszcz w godzinach: {self.formatHours(forecastData['rain']['hour'])}" if len(forecastData["rain"]["hour"]) else ''}
+{f"Śnieg w godzinach: {self.formatHours(forecastData['snow']['hour'])}" if len(forecastData["snow"]["hour"]) else ''}"""
         return text
 
     @staticmethod
@@ -148,6 +148,24 @@ Opis: {weather['weather'][0]['description']}
     @staticmethod
     def lprint(text):
         print(f"{datetime.datetime.now()}: {text}")
+        
+    @staticmethod
+    def formatHours(hours: list) -> str:
+        # From list of hours returns string of periods
+        # [1, 4, 7, 13, 16, 22] -> 1-9, 13-18, 22-24
+        periods = []
+        for i, v in enumerate(hours):
+            if i:
+                if v != prev + 3:
+                    periods.append(str(prev+2))
+                    periods.append(str(v))
+                if i == len(hours)-1:
+                    periods.append(str(v+2))
+            else:
+                periods.append(str(v))
+            prev = v
+        return ", ".join(["-".join(hoursPair) for hoursPair in [periods[0+i*2:2+i*2] for i in range(int(len(periods)/2))]])
+    
 
 
 if __name__ == "__main__":
